@@ -286,93 +286,14 @@ module Liquid
       input = input.instance_of?(String) ? input : Utils.to_s(input)
       words = words.instance_of?(Integer) ? words : Utils.to_integer(words)
       words = 1 if words <= 0
-
       return input if words + 1 > MAX_I32
 
-      len = input.bytesize
-      pos = 0
-      word_count = 0
+      # split(nil, limit) splits on whitespace, strips leading WS, stops at limit segments
+      wordlist = input.split(nil, words + 1)
+      return input if wordlist.length <= words
 
-      # Skip leading whitespace
-      while pos < len
-        b = input.getbyte(pos)
-        break unless b == 32 || b == 9 || b == 10 || b == 13 || b == 12
-        pos += 1
-      end
-
-      first_word_start = pos
-      last_word_end = pos
-      simple_spacing = true
-
-      while pos < len
-        word_count += 1
-        word_start = pos
-
-        # Skip non-whitespace chars (word body)
-        while pos < len
-          b = input.getbyte(pos)
-          break if b == 32 || b == 9 || b == 10 || b == 13 || b == 12
-          pos += 1
-        end
-
-        last_word_end = pos
-
-        if word_count >= words
-          # Check if more words follow
-          while pos < len
-            b = input.getbyte(pos)
-            break unless b == 32 || b == 9 || b == 10 || b == 13 || b == 12
-            pos += 1
-          end
-
-          if pos < len
-            # More words exist — truncate
-            truncate_string = Utils.to_s(truncate_string)
-            if simple_spacing && first_word_start == 0
-              return (+input.byteslice(0, last_word_end)) << truncate_string
-            else
-              # Rebuild with normalized whitespace
-              result = nil
-              p2 = first_word_start
-              wc = 0
-              while p2 < last_word_end && wc < words
-                ws = p2
-                while p2 < last_word_end
-                  b2 = input.getbyte(p2)
-                  break if b2 == 32 || b2 == 9 || b2 == 10 || b2 == 13 || b2 == 12
-                  p2 += 1
-                end
-                wc += 1
-                if result
-                  result << " " << input.byteslice(ws, p2 - ws)
-                else
-                  result = +input.byteslice(ws, p2 - ws)
-                end
-                while p2 < last_word_end
-                  b2 = input.getbyte(p2)
-                  break unless b2 == 32 || b2 == 9 || b2 == 10 || b2 == 13 || b2 == 12
-                  p2 += 1
-                end
-              end
-              return result ? result.concat(truncate_string) : truncate_string
-            end
-          end
-          break
-        end
-
-        # Check whitespace between words (single space = simple)
-        ws_start = pos
-        while pos < len
-          b = input.getbyte(pos)
-          break unless b == 32 || b == 9 || b == 10 || b == 13 || b == 12
-          pos += 1
-        end
-        if pos > ws_start && (pos - ws_start != 1 || input.getbyte(ws_start) != 32)
-          simple_spacing = false
-        end
-      end
-
-      input
+      ts = truncate_string.instance_of?(String) ? truncate_string : Utils.to_s(truncate_string)
+      wordlist[0, words].join(" ") << ts
     end
 
     # @liquid_public_docs
