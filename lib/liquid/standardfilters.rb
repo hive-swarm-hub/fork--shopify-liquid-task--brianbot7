@@ -293,7 +293,8 @@ module Liquid
       return input if wordlist.length <= words
 
       ts = truncate_string.instance_of?(String) ? truncate_string : Utils.to_s(truncate_string)
-      wordlist[0, words].join(" ") << ts
+      wordlist.pop
+      wordlist.join(" ") << ts
     end
 
     # @liquid_public_docs
