@@ -93,51 +93,17 @@ module Liquid
           # Emit text before variable
           @tokens << src.byteslice(pos, idx - pos) if idx > pos
 
-          # Scan variable token — matches original tokenizer's byte-by-byte logic:
-          # Find } or {, then check next byte for }}/{% nesting
-          scan_pos = idx + 2
-          found = false
-          while scan_pos < len
-            b = src.getbyte(scan_pos)
-            if b == CLOSE_CURLEY # }
-              if scan_pos + 1 >= len
-                @tokens << src.byteslice(idx, scan_pos + 1 - idx)
-                pos = scan_pos + 1
-                found = true
-                break
-              end
-              b2 = src.getbyte(scan_pos + 1)
-              if b2 == CLOSE_CURLEY
-                @tokens << src.byteslice(idx, scan_pos + 2 - idx)
-                pos = scan_pos + 2
-                found = true
-                break
-              else
-                @tokens << src.byteslice(idx, scan_pos + 1 - idx)
-                pos = scan_pos + 1
-                found = true
-                break
-              end
-            elsif b == OPEN_CURLEY
-              if scan_pos + 1 < len && src.getbyte(scan_pos + 1) == PERCENTAGE
-                close = src.byteindex('%}', scan_pos + 2)
-                if close
-                  @tokens << src.byteslice(idx, close + 2 - idx)
-                  pos = close + 2
-                else
-                  @tokens << src.byteslice(idx, len - idx)
-                  pos = len
-                end
-                found = true
-                break
-              end
-              scan_pos += 1
+          # Fast path: use byteindex to find first } instead of byte-by-byte loop
+          close_brace = src.byteindex('}', idx + 2)
+          if close_brace
+            if close_brace + 1 < len && src.getbyte(close_brace + 1) == CLOSE_CURLEY
+              @tokens << src.byteslice(idx, close_brace + 2 - idx)
+              pos = close_brace + 2
             else
-              scan_pos += 1
+              @tokens << src.byteslice(idx, close_brace + 1 - idx)
+              pos = close_brace + 1
             end
-          end
-
-          unless found
+          else
             @tokens << "{{"
             pos = idx + 2
           end
