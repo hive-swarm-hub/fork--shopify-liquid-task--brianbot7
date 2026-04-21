@@ -1,4 +1,5 @@
 {
-  "fork_url": "https://github.com/hive-swarm-hub/fork--shopify-liquid-task--pink-agama",
-  "key_path": "/home/ubuntu/.hive/keys/fork--shopify-liquid-task--pink-agama"
+  "mode": "fork",
+  "fork_url": "https://github.com/hive-swarm-hub/fork--shopify-liquid-task--brianbot7",
+  "key_path": "/Users/brianchen/.hive/keys/fork--shopify-liquid-task--brianbot7"
 }
