@@ -180,7 +180,7 @@ module Liquid
           else
             # Fallback: text token starting with '{'
             if parse_context.trim_whitespace
-              token.lstrip!
+              token = token.lstrip
             end
             parse_context.trim_whitespace = false
             @nodelist << token
@@ -188,7 +188,7 @@ module Liquid
           end
         else
           if parse_context.trim_whitespace
-            token.lstrip!
+            token = token.lstrip
           end
           parse_context.trim_whitespace = false
           @nodelist << token
@@ -207,10 +207,12 @@ module Liquid
         previous_token = @nodelist.last
         if previous_token.is_a?(String)
           first_byte = previous_token.getbyte(0)
-          previous_token.rstrip!
-          if previous_token.empty? && parse_context[:bug_compatible_whitespace_trimming] && first_byte
-            previous_token << first_byte
+          stripped = previous_token.rstrip
+          if stripped.empty? && parse_context[:bug_compatible_whitespace_trimming] && first_byte
+            stripped = +(stripped)
+            stripped << first_byte
           end
+          @nodelist[-1] = stripped
         end
       end
       parse_context.trim_whitespace = (token.getbyte(token.bytesize - 3) == DASH_BYTE)
