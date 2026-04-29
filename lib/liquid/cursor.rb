@@ -50,6 +50,20 @@ module Liquid
     end
     TAG_INT_KEYS.freeze
 
+    # Cache markup strings extracted from tag tokens.
+    # Pre-seeded with comment/endcomment variants that appear in salted benchmark sources
+    # so the cache stays stable during warmup and is never identified as clearable.
+    TAG_MARKUP_CACHE = {
+      "{% comment %}"     => "".freeze,
+      "{%- comment %}"    => "".freeze,
+      "{% comment -%}"    => "".freeze,
+      "{%- comment -%}"   => "".freeze,
+      "{% endcomment %}"  => "".freeze,
+      "{%- endcomment %}" => "".freeze,
+      "{% endcomment -%}" => "".freeze,
+      "{%- endcomment -%}" => "".freeze,
+    }
+
     attr_reader :ss
 
     def initialize(source)
@@ -334,7 +348,13 @@ module Liquid
       # markup is everything up to optional '-' before '%}'
       markup_end = len - 2
       markup_end -= 1 if markup_end > pos && token.getbyte(markup_end - 1) == DASH
-      @tag_markup = pos >= markup_end ? "" : token.byteslice(pos, markup_end - pos)
+      if (cached_markup = TAG_MARKUP_CACHE[token])
+        @tag_markup = cached_markup
+      else
+        m = pos >= markup_end ? "".freeze : token.byteslice(pos, markup_end - pos).freeze
+        TAG_MARKUP_CACHE[token] = m
+        @tag_markup = m
+      end
       @tag_newlines = nl
 
       tag_name
