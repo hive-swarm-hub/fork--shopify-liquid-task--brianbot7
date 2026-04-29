@@ -103,6 +103,7 @@ module Liquid
         name = m.is_a?(String) ? m : m.to_s
         NO_ARG_FILTER_CACHE[name]
         SINGLE_NO_ARG_FILTER_CACHE[name]
+        FILTER_NAME_INTERN[name] unless name.bytesize <= 7
       end
     end
 
