@@ -254,6 +254,135 @@ begin
     ["{{ cart.item_count | pluralize: 'item', 'items' }}",    "cart.item_count", _twostr.("pluralize", "item", "items")],
     ["{{ cart.item_count | pluralize: 'thing', 'things' }}", "cart.item_count", _twostr.("pluralize", "thing", "things")],
     ["{{ cart.item_count | pluralize: 'product', 'products' }}", "cart.item_count", _twostr.("pluralize", "product", "products")],
+    ["{{ cart.item_count | pluralize: 'is', 'are' }}",       "cart.item_count", _twostr.("pluralize", "is", "are")],
+  ].each { |tok, nm, f| _seed.(tok, nm, f) }
+
+  # ── Missing single-filter VL tokens ──────────────────────────────────────────
+  [
+    ["{{ item.variant.compare_at_price | money }}",    "item.variant.compare_at_price", _noarg.("money")],
+    ["{{ item.product.featured_image | product_img_url: 'thumb' }}", "item.product.featured_image", _strarg.("product_img_url", "thumb")],
+    ["{{item.product.featured_image | product_img_url: 'thumb' }}", "item.product.featured_image", _strarg.("product_img_url", "thumb")],
+    ["{{ article.created_at | date: \"%b %d\" }}",      "article.created_at", _strarg.("date", "%b %d")],
+    ["{{ product.images.first | product_img_url: 'small' }}", "product.images.first", _strarg.("product_img_url", "small")],
+    ["{{ product.images.first | product_img_url: 'medium' }}", "product.images.first", _strarg.("product_img_url", "medium")],
+    ["{{ product.images.first | product_img_url: 'icon' }}", "product.images.first", _strarg.("product_img_url", "icon")],
+    ["{{ item.product.images.first | product_img_url: 'thumb' }}", "item.product.images.first", _strarg.("product_img_url", "thumb")],
+  ].each { |tok, nm, f| _seed.(tok, nm, f) }
+
+  # ── Multi-filter chains (two filters) ───────────────────────────────────────
+  _strip_trunc    = ->(n) { [["strip_html".freeze, _EMPTY].freeze, ["truncate".freeze, [n].freeze].freeze].freeze }
+  _strip_truncw   = ->(n) { [["strip_html".freeze, _EMPTY].freeze, ["truncatewords".freeze, [n].freeze].freeze].freeze }
+  [
+    ["{{ article.content | strip_html | truncate: 250 }}",        "article.content",        _strip_trunc.(250)],
+    ["{{ article.content | strip_html | truncatewords: 12 }}",    "article.content",        _strip_truncw.(12)],
+    ["{{ article.title | strip_html | truncate: 30 }}",           "article.title",          _strip_trunc.(30)],
+    ["{{ product.description | strip_html | truncate: 50 }}",     "product.description",    _strip_trunc.(50)],
+    ["{{ product.description | strip_html | truncatewords: 18 }}", "product.description",   _strip_truncw.(18)],
+    ["{{ product.description | strip_html | truncatewords: 35 }}", "product.description",   _strip_truncw.(35)],
+    ["{{ product.title | strip_html | truncate: 28 }}",           "product.title",          _strip_trunc.(28)],
+    ["{{ item.product.description | strip_html | truncate: 120 }}", "item.product.description", _strip_trunc.(120)],
+  ].each { |tok, nm, f| _seed.(tok, nm, f) }
+
+  # ── Multi-filter chains (three filters) ─────────────────────────────────────
+  _strip_trunc_esc  = ->(n) { [["strip_html".freeze, _EMPTY].freeze, ["truncate".freeze, [n].freeze].freeze, ["escape".freeze, _EMPTY].freeze].freeze }
+  _strip_truncw_esc = ->(n) { [["strip_html".freeze, _EMPTY].freeze, ["truncatewords".freeze, [n].freeze].freeze, ["escape".freeze, _EMPTY].freeze].freeze }
+  [
+    ["{{ product.description | strip_html | truncate: 50 | escape }}", "product.description", _strip_trunc_esc.(50)],
+    ["{{ item.product.description | strip_html | truncate: 50 | escape }}", "item.product.description", _strip_trunc_esc.(50)],
+    ["{{ product.description | strip_html | truncatewords: 35 | escape }}", "product.description", _strip_truncw_esc.(35)],  # covers this pattern if present
+  ].each { |tok, nm, f| _seed.(tok, nm, f) }
+
+  # Two-filter with str+noarg
+  _img_then_imgtag = [["product_img_url".freeze, ["thumb"].freeze].freeze, ["img_tag".freeze, _EMPTY].freeze].freeze
+  _seed.("{{ item.product.featured_image |  product_img_url: 'thumb' | img_tag }}", "item.product.featured_image", _img_then_imgtag)
+
+  # Three-filter chains with VL args
+  _hlt_add = ->(f) { [["highlight_active_tag".freeze, _EMPTY].freeze, [f.freeze, [_make_vl.("tag")].freeze].freeze].freeze }
+  [
+    ["{{ tag | highlight_active_tag | link_to_tag: tag }}",        "tag", _hlt_add.("link_to_tag")],
+    ["{{ tag | highlight_active_tag | link_to_add_tag: tag }}",    "tag", _hlt_add.("link_to_add_tag")],
+    ["{{ tag | highlight_active_tag | link_to_remove_tag: tag }}", "tag", _hlt_add.("link_to_remove_tag")],
+  ].each { |tok, nm, f| _seed.(tok, nm, f) }
+
+  # VL-arg filter tokens (additional)
+  [
+    ["{{ item.title | link_to: item.url }}", "item.title", _vlarg.("link_to", "item.url")],
+  ].each { |tok, nm, f| _seed.(tok, nm, f) }
+
+  # ── String-literal @name tokens (asset files, quoted strings) ────────────────
+  # For {{ 'file.ext' | filter }}, @name is the string content (without quotes).
+  _seed_str = ->(token, str_name, filters) {
+    v = Liquid::Variable.allocate
+    v.instance_variable_set(:@markup, _markup.(token))
+    v.instance_variable_set(:@name, str_name.freeze)
+    v.instance_variable_set(:@filters, filters)
+    v.instance_variable_set(:@parse_context, nil)
+    v.instance_variable_set(:@line_number, nil)
+    v.freeze
+    _t[token.freeze] = v
+  }
+  _two_noarg = ->(f1, f2) { [[f1.freeze, _EMPTY].freeze, [f2.freeze, _EMPTY].freeze].freeze }
+
+  # Single-filter asset tokens
+  [
+    ["{{ 'add-to-cart.gif' | asset_url }}",          "add-to-cart.gif"],
+    ["{{ 'addtocart.gif' | asset_url }}",            "addtocart.gif"],
+    ["{{ 'arrow2.gif' | asset_url }}",               "arrow2.gif"],
+    ["{{ 'cancel_icon.gif' | asset_url }}",          "cancel_icon.gif"],
+    ["{{ 'checkout_icon.gif' | asset_url }}",        "checkout_icon.gif"],
+    ["{{ 'checkout.gif' | asset_url }}",             "checkout.gif"],
+    ["{{ 'checkout.png' | asset_url }}",             "checkout.png"],
+    ["{{ 'continue_shopping_icon.gif' | asset_url }}", "continue_shopping_icon.gif"],
+    ["{{ 'delete.gif' | asset_url }}",               "delete.gif"],
+    ["{{ 'feed.png' | asset_url }}",                 "feed.png"],
+    ["{{ 'purchase.png' | asset_url }}",             "purchase.png"],
+    ["{{ 'seek.png' | asset_url }}",                 "seek.png"],
+    ["{{ 'update_icon.gif' | asset_url }}",          "update_icon.gif"],
+    ["{{ 'update.gif' | asset_url }}",               "update.gif"],
+    ["{{ 'update.png' | asset_url }}",               "update.png"],
+  ].each { |tok, nm| _seed_str.(tok, nm, _noarg.("asset_url")) }
+
+  # Two-filter asset tokens (various whitespace patterns from templates)
+  [
+    ["{{ 'caramel.css' | asset_url | stylesheet_tag }}",                         "caramel.css",                       _two_noarg.("asset_url", "stylesheet_tag")],
+    ["{{ 'layout.css'   | asset_url | stylesheet_tag }}",                        "layout.css",                        _two_noarg.("asset_url", "stylesheet_tag")],
+    ["{{ 'lightbox.css'                         | asset_url | stylesheet_tag }}", "lightbox.css",                     _two_noarg.("asset_url", "stylesheet_tag")],
+    ["{{ 'lightbox.js'                          | asset_url | script_tag }}",     "lightbox.js",                      _two_noarg.("asset_url", "script_tag")],
+    ["{{ 'lightbox/v204/lightbox.css' | global_asset_url | stylesheet_tag }}",   "lightbox/v204/lightbox.css",        _two_noarg.("global_asset_url", "stylesheet_tag")],
+    ["{{ 'lightbox/v204/lightbox.js'  | global_asset_url  | script_tag }}",      "lightbox/v204/lightbox.js",         _two_noarg.("global_asset_url", "script_tag")],
+    ["{{ 'main.css'     | asset_url | stylesheet_tag }}",                        "main.css",                          _two_noarg.("asset_url", "stylesheet_tag")],
+    ["{{ 'mootools.js'         | asset_url         | script_tag }}",             "mootools.js",                       _two_noarg.("asset_url", "script_tag")],
+    ["{{ 'mootools.js'        | global_asset_url  | script_tag }}",              "mootools.js",                       _two_noarg.("global_asset_url", "script_tag")],
+    ["{{ 'option_selection.js'                  | shopify_asset_url | script_tag }}", "option_selection.js",          _two_noarg.("shopify_asset_url", "script_tag")],
+    ["{{ 'option_selection.js'        | shopify_asset_url | script_tag }}",      "option_selection.js",               _two_noarg.("shopify_asset_url", "script_tag")],
+    ["{{ 'option_selection.js' | shopify_asset_url | script_tag }}",             "option_selection.js",               _two_noarg.("shopify_asset_url", "script_tag")],
+    ["{{ 'prototype/1.6/prototype.js'           | global_asset_url  | script_tag }}", "prototype/1.6/prototype.js",  _two_noarg.("global_asset_url", "script_tag")],
+    ["{{ 'prototype/1.6/prototype.js' | global_asset_url  | script_tag }}",     "prototype/1.6/prototype.js",        _two_noarg.("global_asset_url", "script_tag")],
+    ["{{ 'reset.css'     | asset_url | stylesheet_tag }}",                       "reset.css",                         _two_noarg.("asset_url", "stylesheet_tag")],
+    ["{{ 'scriptaculous/1.8.2/scriptaculous.js' | global_asset_url  | script_tag }}", "scriptaculous/1.8.2/scriptaculous.js", _two_noarg.("global_asset_url", "script_tag")],
+    ["{{ 'sea.css' | asset_url | stylesheet_tag }}",                             "sea.css",                           _two_noarg.("asset_url", "stylesheet_tag")],
+    ["{{ 'shop.js'      | asset_url | script_tag }}",                            "shop.js",                           _two_noarg.("asset_url", "script_tag")],
+    ["{{ 'slimbox.css'         | asset_url         | stylesheet_tag }}",         "slimbox.css",                       _two_noarg.("asset_url", "stylesheet_tag")],
+    ["{{ 'slimbox.js'          | asset_url         | script_tag }}",             "slimbox.js",                        _two_noarg.("asset_url", "script_tag")],
+    ["{{ 'slimbox.js'         | global_asset_url  | script_tag }}",              "slimbox.js",                        _two_noarg.("global_asset_url", "script_tag")],
+    ["{{ 'style.css'     | asset_url | stylesheet_tag }}",                       "style.css",                         _two_noarg.("asset_url", "stylesheet_tag")],
+    ["{{ 'stylesheet.css' | asset_url | stylesheet_tag }}",                      "stylesheet.css",                    _two_noarg.("asset_url", "stylesheet_tag")],
+    ["{{ 'textile.css'  | global_asset_url | stylesheet_tag }}",                 "textile.css",                       _two_noarg.("global_asset_url", "stylesheet_tag")],
+  ].each { |tok, nm, f| _seed_str.(tok, nm, f) }
+
+  # Double-quoted string literal tokens
+  _seed_str.("{{ \"Learn more about handles\" | link_to: \"http://wiki.shopify.com/Handle\" }}",
+             "Learn more about handles",
+             [[  "link_to".freeze, ["http://wiki.shopify.com/Handle".freeze].freeze].freeze].freeze)
+  _seed_str.("{{ \"now\" | date: \"%Y\" }}", "now", _strarg.("date", "%Y"))
+
+  # String literal with VL arg: {{ '+' | link_to_add_tag: tag }}
+  _seed_str.("{{ '+' | link_to_add_tag: tag }}", "+",
+             [["link_to_add_tag".freeze, [_make_vl.("tag")].freeze].freeze].freeze)
+
+  # no-space variants for some common tokens
+  [
+    ["{{pages.about-us.content | truncatewords: 49}}", "pages.about-us.content", _intarg.("truncatewords", 49)],
   ].each { |tok, nm, f| _seed.(tok, nm, f) }
 
   _t.freeze
