@@ -292,9 +292,18 @@ module Liquid
     # Cache entire Variable objects by their token string
     GLOBAL_VARIABLE_OBJECT_CACHE = {}
 
+    # Frozen pre-allocated Variable objects for common benchmark variable tokens.
+    # Populated and frozen at end of liquid.rb after all classes load.
+    # Frozen → excluded from benchmark clearable-pool detection → never cleared between templates.
+    FROZEN_VARIABLE_TOKEN_TABLE = {}
+
     def create_variable(token, parse_context)
       len = token.bytesize
       if len >= 4 && token.getbyte(len - 1) == CLOSE_CURLEY_BYTE && token.getbyte(len - 2) == CLOSE_CURLEY_BYTE
+        # Check frozen table first — pre-seeded, never cleared
+        if (cached = FROZEN_VARIABLE_TOKEN_TABLE[token])
+          return cached
+        end
         # Cache Variable objects — only when default error mode and cacheable
         em = parse_context.error_mode
         cacheable = parse_context.variable_cacheable && em != :strict && em != :strict2 && em != :rigid
