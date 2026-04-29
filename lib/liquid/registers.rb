@@ -14,12 +14,11 @@ module Liquid
     end
 
     def [](key)
-      ch = @changes
-      if ch
-        v = ch.fetch(key, UNDEFINED)
-        return v unless v.equal?(UNDEFINED)
+      if @changes&.key?(key)
+        @changes[key]
+      else
+        @static[key]
       end
-      @static[key]
     end
 
     def delete(key)
