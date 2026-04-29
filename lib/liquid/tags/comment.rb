@@ -40,6 +40,7 @@ module Liquid
         # Consume tokens without creating child nodes.
         # The children tag doesn't require to be a valid Liquid except the comment and raw tag.
         # The child comment and raw tag must be closed.
+        cursor = parse_context.cursor
         while (token = tokenizer.send(:shift))
           tag_name = if tokenizer.for_liquid_tag
             next if token.empty? || token.match?(BlockBody::WhitespaceOrNothing)
@@ -50,8 +51,12 @@ module Liquid
 
             tag_name_match[1]
           else
-            token =~ BlockBody::FullToken
-            Regexp.last_match(2)
+            # Use cursor for {%...%} tokens to avoid MatchData allocation
+            b0 = token.getbyte(0)
+            b1 = token.getbyte(1)
+            if b0 == 123 && b1 == 37  # '{%'
+              cursor.parse_tag_token(token)
+            end
           end
 
           case tag_name
