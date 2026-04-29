@@ -9,3 +9,4 @@ reference-main/
 shopify-liquid.zip
 *.log
 .hive/agent.log
+.hive/hive-backup-shopify/
