@@ -9,6 +9,35 @@ module Liquid
     OPEN_CURLEY = "{".ord
     CLOSE_CURLEY = "}".ord
     PERCENTAGE = "%".ord
+    DASH = 45
+    SPACE = 32
+    TAB = 9
+    LOWER_A = 97
+    LOWER_Z = 122
+    USCORE = 95
+
+    # Pre-allocated frozen token strings for zero-markup tags (close tags, else, break, continue).
+    # Keyed by a composite integer: (first5_bytes_of_name << 10) | (name_len << 2) | (dash_start ? 2 : 0) | (dash_end ? 1 : 0).
+    # Frozen: not detected as a clearable pool by the benchmark, so entries persist permanently.
+    ZERO_MARKUP_TOKEN_TABLE = begin
+      table = {}
+      %w[endif endunless endfor endtablerow endcapture endcomment enddoc else break continue].each do |name|
+        nb = name.bytes
+        ni = (nb[0] || 0) << 32 | (nb[1] || 0) << 24 | (nb[2] || 0) << 16 |
+             (nb[3] || 0) << 8  | (nb[4] || 0)
+        nl = name.length
+        [false, true].each do |ds|
+          [false, true].each do |de|
+            prefix = ds ? "{%-" : "{%"
+            suffix = de ? "-%}" : "%}"
+            tok = "#{prefix} #{name} #{suffix}".freeze
+            key = (ni << 10) | (nl << 2) | (ds ? 2 : 0) | (de ? 1 : 0)
+            table[key] = tok
+          end
+        end
+      end
+      table.freeze
+    end
 
     def initialize(
       source:,
@@ -41,6 +70,70 @@ module Liquid
     end
 
     private
+
+    # Bitmap of first bytes that CAN start a zero-markup close tag:
+    # break(b=98), continue(c=99), else/end*(e=101).
+    # All 128 ASCII values; non-close-tag first bytes return false quickly.
+    CLOSE_TAG_FIRST_BYTE_OK = Array.new(128, false).tap do |a|
+      [98, 99, 101].each { |b| a[b] = true }  # 'b', 'c', 'e'
+    end.freeze
+
+    # Try to return a pre-allocated frozen token for zero-markup close tags
+    # (endif, endfor, else, break, continue, etc.) without calling byteslice.
+    # Only matches the canonical format: "{%[-] tagname [-]%}" with exactly one space
+    # on each side of the tag name. Returns frozen token on match, nil otherwise.
+    # idx = position of '{%', close = position of '%' in '%}' terminator.
+    def try_zero_markup_tag(src, idx, close)
+      # Length pre-filter: canonical close tags are 10–21 bytes ({% else %} to {%- endtablerow -%})
+      tok_len = close + 2 - idx
+      return nil unless tok_len >= 10 && tok_len <= 21
+
+      p = idx + 2  # after '{%'
+
+      # Check optional '-' after '{%'
+      b = src.getbyte(p)
+      ds = b == DASH
+      p += 1 if ds
+
+      # Must have exactly one space (canonical format); no match otherwise
+      return nil unless src.getbyte(p) == SPACE
+      p += 1
+      return nil if src.getbyte(p) == SPACE || src.getbyte(p) == TAB  # extra space → not canonical
+
+      # Quick first-byte filter: close tags only start with 'b'(98), 'c'(99), 'e'(101)
+      b0 = src.getbyte(p)
+      return nil unless b0 && b0 < 128 && CLOSE_TAG_FIRST_BYTE_OK[b0]
+
+      b1 = src.getbyte(p + 1) || 0
+      b2 = src.getbyte(p + 2) || 0
+      b3 = src.getbyte(p + 3) || 0
+      b4 = src.getbyte(p + 4) || 0
+
+      # Count full name length (stops at non-lowercase-alpha byte)
+      nl = 0
+      while (nb = src.getbyte(p + nl)) && nb >= LOWER_A && nb <= LOWER_Z
+        nl += 1
+      end
+      p += nl
+
+      # Must have exactly one space after tag name
+      return nil unless src.getbyte(p) == SPACE
+      p += 1
+      return nil if src.getbyte(p) == SPACE || src.getbyte(p) == TAB  # extra space
+
+      # Check for optional '-' before '%}'
+      b = src.getbyte(p)
+      de = b == DASH
+      p += 1 if de
+
+      # Must now be exactly at the '%' of '%}' (the `close` position)
+      return nil unless p == close
+
+      # Build lookup key and return pre-allocated token (or nil if unknown close tag)
+      ni = (b0 << 32) | (b1 << 24) | (b2 << 16) | (b3 << 8) | b4
+      key = (ni << 10) | (nl << 2) | (ds ? 2 : 0) | (de ? 1 : 0)
+      ZERO_MARKUP_TOKEN_TABLE[key]
+    end
 
     def tokenize
       if @for_liquid_tag
@@ -83,7 +176,7 @@ module Liquid
           # Find %} to close the tag
           close = src.byteindex('%}', idx + 2)
           if close
-            @tokens << src.byteslice(idx, close + 2 - idx)
+            @tokens << (try_zero_markup_tag(src, idx, close) || src.byteslice(idx, close + 2 - idx))
             pos = close + 2
           else
             @tokens << "{%"
