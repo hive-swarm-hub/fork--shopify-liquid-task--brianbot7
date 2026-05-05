@@ -386,4 +386,14 @@ begin
   ].each { |tok, nm, f| _seed.(tok, nm, f) }
 
   _t.freeze
+
+  # Build FROZEN_VAR_HASH_TO_STR: 32-bit djb2_hash → frozen token string.
+  # Used by Tokenizer#tokenize_fast to skip byteslice for {{ ... }} tokens on a hash match.
+  # 32-bit mask keeps intermediate values as Fixnum (no bignum allocations during lookup).
+  _t.each_key do |tok_str|
+    h = 5381
+    tok_str.each_byte { |b| h = (((h << 5) + h) ^ b) & 0xFFFFFFFF }
+    Liquid::Tokenizer::FROZEN_VAR_HASH_TO_STR[h] = tok_str
+  end
+  Liquid::Tokenizer::FROZEN_VAR_HASH_TO_STR.freeze
 end
