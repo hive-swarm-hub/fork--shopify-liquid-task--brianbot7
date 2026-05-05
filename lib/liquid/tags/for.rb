@@ -203,7 +203,7 @@ module Liquid
       end
 
       segment = Utils.slice_collection(collection, from, to)
-      segment.reverse! if @reversed
+      segment.reverse! if @reversed && segment.length > 1
 
       offsets[@name] = from + segment.length
 

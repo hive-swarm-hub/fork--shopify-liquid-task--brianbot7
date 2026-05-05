@@ -23,14 +23,14 @@ module Liquid
     end
 
     def self.slice_collection_using_each(collection, from, to)
-      segments = []
-      index    = 0
-
       # Maintains Ruby 1.8.7 String#each behaviour on 1.9
       if collection.is_a?(String)
         return collection.empty? ? [] : [collection]
       end
-      return [] unless collection.respond_to?(:each)
+      return Const::EMPTY_ARRAY unless collection.respond_to?(:each)
+
+      segments = []
+      index    = 0
 
       collection.each do |item|
         if to && to <= index
