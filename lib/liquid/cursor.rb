@@ -48,6 +48,16 @@ module Liquid
       name.each_byte { |b| key = (key << 8) | b }
       TAG_INT_KEYS[key] = name.freeze
     end
+    # Long tag names (>7 bytes): keyed by (len<<56)|first_7_bytes_packed.
+    # Keys are distinct from short-name keys (which have bits 56-63 = 0)
+    # since len ≥ 8 here. No collision among these names (verified by inspection).
+    %w[endunless endtablerow endcapture endcomment decrement increment tablerow inline_comment].each do |name|
+      nb = name.bytes
+      key = (name.length << 56) |
+            (nb[0] << 48) | (nb[1] << 40) | (nb[2] << 32) | (nb[3] << 24) |
+            (nb[4] << 16) | (nb[5] << 8) | nb[6]
+      TAG_INT_KEYS[key] = name.freeze
+    end
     TAG_INT_KEYS.freeze
 
     # Cache markup strings extracted from tag tokens.
@@ -332,6 +342,17 @@ module Liquid
           j += 1
         end
         tag_name = TAG_INT_KEYS[int_key]
+      elsif name_len <= 20
+        # (len<<56)|first_7_bytes — stays Fixnum since len≤20 and bits 56-63 ≤ 20
+        lk = (name_len << 56) |
+             (token.getbyte(name_start)     << 48) |
+             (token.getbyte(name_start + 1) << 40) |
+             (token.getbyte(name_start + 2) << 32) |
+             (token.getbyte(name_start + 3) << 24) |
+             (token.getbyte(name_start + 4) << 16) |
+             (token.getbyte(name_start + 5) << 8)  |
+             token.getbyte(name_start + 6)
+        tag_name = TAG_INT_KEYS[lk]
       end
       tag_name ||= TAG_NAME_INTERN[token.byteslice(name_start, name_len)]
 
