@@ -159,7 +159,7 @@ module Liquid
     end
 
     def registers
-      @registers ||= {}
+      @registers ||= { for: {}, for_stack: [] }
     end
 
     def assigns

@@ -179,7 +179,8 @@ module Liquid
     end
 
     def collection_segment(context)
-      offsets = context.registers[:for] ||= {}
+      offsets = context.registers[:for]
+      offsets ||= (context.registers[:for] = {})
 
       from = if @from == :continue
         offsets[@name].to_i
@@ -211,7 +212,8 @@ module Liquid
     end
 
     def render_segment(context, output, segment)
-      for_stack = context.registers[:for_stack] ||= []
+      for_stack = context.registers[:for_stack]
+      for_stack ||= (context.registers[:for_stack] = [])
       length    = segment.length
 
       # Reuse ForloopDrop and scope hash to avoid per-loop allocations
