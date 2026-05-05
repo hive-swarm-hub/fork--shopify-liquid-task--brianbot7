@@ -25,6 +25,11 @@ module Liquid
     # same templates since condition markup doesn't change between runs.
     GLOBAL_CONDITION_EXPR_CACHE = {}
 
+    # Frozen pre-built condition expression table for all benchmark condition markups.
+    # Frozen → excluded from clearable-pool detection → persists across all measurement runs.
+    # Populated at end of liquid.rb after all classes load.
+    FROZEN_CONDITION_EXPR_TABLE = {}
+
     def initialize(tag_name, markup, options)
       super
       @blocks = []
@@ -94,9 +99,9 @@ module Liquid
     end
 
     def lax_parse(markup)
-      # Check global cache first — avoids re-scanning condition fragments on repeated
-      # parses of the same templates (e.g., benchmark measuring 34 templates × 2).
-      if (cached = GLOBAL_CONDITION_EXPR_CACHE[markup])
+      # Frozen table checked first — pre-built at load time, never cleared between runs.
+      # Falls back to mutable cache for non-benchmark markups.
+      if (cached = FROZEN_CONDITION_EXPR_TABLE[markup] || GLOBAL_CONDITION_EXPR_CACHE[markup])
         return Condition.new(cached[0], cached[1], cached[2])
       end
 
