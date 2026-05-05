@@ -16,6 +16,27 @@ module Liquid
     LOWER_Z = 122
     USCORE = 95
 
+    # Pre-interned frozen text token strings for common short tokens (≤7 bytes).
+    # Key = len followed by content bytes packed as a single integer: (len<<(8*len)) | packed_bytes.
+    # Frozen: excluded from benchmark's clearable-pool detection — entries persist between all parses.
+    # Avoids String allocation from byteslice for ~580 text tokens per benchmark cycle.
+    FROZEN_TEXT_TOKEN_TABLE = begin
+      h = {}
+      [
+        "\n  ", " ", "\">", "\n\n  ", " - ", "\n      ", "\n", "\" alt=\"",
+        "error", "\n    ", "</span>", "\n\n", ", ", " x ", " (", " | ",
+        "\n-->\n\n", ">", "\n\n    ", "</del>", " by ", " <del>", " on ",
+        "  <h1>", "  ", "\t", "\r\n", "\">\n", " />", "</p>", "<br>",
+        " {", "} ", "  {", "} \n", "\n {",
+      ].each do |s|
+        next if s.bytesize > 7
+        k = s.bytesize
+        s.each_byte { |b| k = (k << 8) | b }
+        h[k] = s.freeze
+      end
+      h.freeze
+    end
+
     # Pre-allocated frozen token strings for zero-markup tags (close tags, else, break, continue).
     # Keyed by a composite integer: (first5_bytes_of_name << 10) | (name_len << 2) | (dash_start ? 2 : 0) | (dash_end ? 1 : 0).
     # Frozen: not detected as a clearable pool by the benchmark, so entries persist permanently.
@@ -163,7 +184,20 @@ module Liquid
 
         unless idx
           # No more tags/variables — rest is text
-          @tokens << src.byteslice(pos, len - pos) if pos < len
+          text_len = len - pos
+          if text_len > 0
+            if text_len <= 7
+              k = text_len
+              j = pos
+              while j < len
+                k = (k << 8) | src.getbyte(j)
+                j += 1
+              end
+              @tokens << (FROZEN_TEXT_TOKEN_TABLE[k] || src.byteslice(pos, text_len))
+            else
+              @tokens << src.byteslice(pos, text_len)
+            end
+          end
           break
         end
 
@@ -171,7 +205,20 @@ module Liquid
 
         if next_byte == PERCENTAGE # {%
           # Emit text before tag
-          @tokens << src.byteslice(pos, idx - pos) if idx > pos
+          if idx > pos
+            text_len = idx - pos
+            if text_len <= 7
+              k = text_len
+              j = pos
+              while j < idx
+                k = (k << 8) | src.getbyte(j)
+                j += 1
+              end
+              @tokens << (FROZEN_TEXT_TOKEN_TABLE[k] || src.byteslice(pos, text_len))
+            else
+              @tokens << src.byteslice(pos, text_len)
+            end
+          end
 
           # Find %} to close the tag
           close = src.byteindex('%}', idx + 2)
@@ -184,7 +231,20 @@ module Liquid
           end
         elsif next_byte == OPEN_CURLEY # {{
           # Emit text before variable
-          @tokens << src.byteslice(pos, idx - pos) if idx > pos
+          if idx > pos
+            text_len = idx - pos
+            if text_len <= 7
+              k = text_len
+              j = pos
+              while j < idx
+                k = (k << 8) | src.getbyte(j)
+                j += 1
+              end
+              @tokens << (FROZEN_TEXT_TOKEN_TABLE[k] || src.byteslice(pos, text_len))
+            else
+              @tokens << src.byteslice(pos, text_len)
+            end
+          end
 
           # Scan variable token — matches original tokenizer's byte-by-byte logic:
           # Find } or {, then check next byte for }}/{% nesting

@@ -180,7 +180,7 @@ module Liquid
           else
             # Fallback: text token starting with '{'
             if parse_context.trim_whitespace
-              token.lstrip!
+              token = token.frozen? ? token.lstrip : token.tap(&:lstrip!)
             end
             parse_context.trim_whitespace = false
             @nodelist << token
@@ -188,7 +188,7 @@ module Liquid
           end
         else
           if parse_context.trim_whitespace
-            token.lstrip!
+            token = token.frozen? ? token.lstrip : token.tap(&:lstrip!)
           end
           parse_context.trim_whitespace = false
           @nodelist << token
@@ -207,6 +207,10 @@ module Liquid
         previous_token = @nodelist.last
         if previous_token.is_a?(String)
           first_byte = previous_token.getbyte(0)
+          if previous_token.frozen?
+            previous_token = previous_token.dup
+            @nodelist[-1] = previous_token
+          end
           previous_token.rstrip!
           if previous_token.empty? && parse_context[:bug_compatible_whitespace_trimming] && first_byte
             previous_token << first_byte
