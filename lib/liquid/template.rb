@@ -196,23 +196,17 @@ module Liquid
     #  * <tt>registers</tt> : hash with register variables. Those can be accessed from
     #    filters and tags and might be useful to integrate liquid more with its host application
     #
-    def render(*args)
+    def render(env0 = nil, opts = nil)
       return '' if @root.nil?
 
-      context = case args.first
+      context = case env0
       when Liquid::Context
-        c = args.shift
-
-        if @rethrow_errors
-          c.exception_renderer = Liquid::RAISE_EXCEPTION_LAMBDA
-        end
-
-        c
+        env0.exception_renderer = Liquid::RAISE_EXCEPTION_LAMBDA if @rethrow_errors
+        env0
       when Liquid::Drop
-        drop         = args.shift
-        drop.context = Context.new([drop, assigns], instance_assigns, registers, @rethrow_errors, @resource_limits, Const::EMPTY_HASH, @environment)
+        env0.context = Context.new_for_render(env0, assigns, instance_assigns, registers, @rethrow_errors, @resource_limits, @environment)
       when Hash
-        Context.new([args.shift, assigns], instance_assigns, registers, @rethrow_errors, @resource_limits, Const::EMPTY_HASH, @environment)
+        Context.new_for_render(env0, assigns, instance_assigns, registers, @rethrow_errors, @resource_limits, @environment)
       when nil
         Context.new(assigns, instance_assigns, registers, @rethrow_errors, @resource_limits, Const::EMPTY_HASH, @environment)
       else
@@ -221,19 +215,18 @@ module Liquid
 
       output = nil
 
-      case args.last
+      case opts
       when Hash
-        options = args.pop
-        output  = options[:output] if options[:output]
+        output  = opts[:output] if opts[:output]
         static_registers = context.registers.static
 
-        options[:registers]&.each do |key, register|
+        opts[:registers]&.each do |key, register|
           static_registers[key] = register
         end
 
-        apply_options_to_context(context, options)
+        apply_options_to_context(context, opts)
       when Module, Array
-        context.add_filters(args.pop)
+        context.add_filters(opts)
       end
 
       # Retrying a render resets resource usage

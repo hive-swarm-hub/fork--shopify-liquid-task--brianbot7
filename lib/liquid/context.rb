@@ -14,7 +14,7 @@ module Liquid
   #
   #   context['bob']  #=> nil  class Context
   class Context
-    attr_reader :scopes, :errors, :registers, :environments, :resource_limits, :static_registers, :static_environments
+    attr_reader :scopes, :errors, :registers, :resource_limits, :static_registers, :static_environments
     attr_accessor :exception_renderer, :template_name, :partial, :global_filter, :strict_variables, :strict_filters, :environment
 
     # rubocop:disable Metrics/ParameterLists
@@ -22,9 +22,23 @@ module Liquid
       new(environments, outer_scope, registers, rethrow_errors, resource_limits, static_environments, environment, &block)
     end
 
+    # Fast-path constructor: accepts two environment hashes without allocating an intermediate Array.
+    # Used by Template#render for the common (Hash assigns + template assigns) case.
+    def self.new_for_render(env0, env1, outer_scope, registers, rethrow_errors, resource_limits, environment)
+      obj = allocate
+      obj.__send__(:init_for_render, env0, env1, outer_scope, registers, rethrow_errors, resource_limits, environment)
+      obj
+    end
+
+    def environments
+      @environments ||= @env1.nil? ? [@env0] : [@env0, @env1]
+    end
+
     def initialize(environments = {}, outer_scope = {}, registers = {}, rethrow_errors = false, resource_limits = nil, static_environments = {}, environment = Environment.default)
       @environment = environment
       @environments = environments.is_a?(Array) ? environments : [environments]
+      @env0 = @environments[0]
+      @env1 = @environments[1]
 
       @static_environments = if static_environments.is_a?(Array)
         static_environments.frozen? ? static_environments : static_environments.freeze
@@ -342,20 +356,24 @@ module Liquid
     attr_reader :base_scope_depth
 
     def try_variable_find_in_environments(key, raise_on_not_found:)
-      envs = @environments
-      len = envs.length
-      if len == 1
-        found_variable = lookup_and_evaluate(envs[0], key, raise_on_not_found: raise_on_not_found)
-        if !found_variable.nil? || @strict_variables && raise_on_not_found
-          return found_variable
+      # Fast path: @env0/@env1 are always set (both regular init and init_for_render).
+      # This avoids Array access overhead from @environments.
+      e0 = @env0
+      if e0
+        found_variable = lookup_and_evaluate(e0, key, raise_on_not_found: raise_on_not_found)
+        return found_variable if !found_variable.nil? || @strict_variables && raise_on_not_found
+        e1 = @env1
+        if e1
+          found_variable = lookup_and_evaluate(e1, key, raise_on_not_found: raise_on_not_found)
+          return found_variable if !found_variable.nil? || @strict_variables && raise_on_not_found
         end
-      elsif len > 0
+        # Fall through to static_environments if not found
+      elsif (envs = @environments)
+        len = envs.length
         i = 0
         while i < len
           found_variable = lookup_and_evaluate(envs[i], key, raise_on_not_found: raise_on_not_found)
-          if !found_variable.nil? || @strict_variables && raise_on_not_found
-            return found_variable
-          end
+          return found_variable if !found_variable.nil? || @strict_variables && raise_on_not_found
           i += 1
         end
       end
@@ -389,14 +407,50 @@ module Liquid
     end
 
     def squash_instance_assigns_with_environments
-      @scopes.last.each_key do |k|
-        @environments.each do |env|
-          if env.key?(k)
-            scopes.last[k] = lookup_and_evaluate(env, k)
-            break
+      scope = @scopes.last
+      return if scope.empty?
+      scope.each_key do |k|
+        e0 = @env0
+        if e0
+          if e0.key?(k)
+            scope[k] = lookup_and_evaluate(e0, k)
+            next
+          end
+          e1 = @env1
+          if e1 && e1.key?(k)
+            scope[k] = lookup_and_evaluate(e1, k)
+          end
+        else
+          (@environments || []).each do |env|
+            if env.key?(k)
+              scope[k] = lookup_and_evaluate(env, k)
+              break
+            end
           end
         end
       end
     end # squash_instance_assigns_with_environments
+
+    def init_for_render(env0, env1, outer_scope, registers, rethrow_errors, resource_limits, environment)
+      @environment = environment
+      @env0 = env0
+      @env1 = env1
+      @static_environments = Const::EMPTY_ARRAY
+      @scopes = [outer_scope || {}]
+      @registers = registers.is_a?(Registers) ? registers : Registers.new(registers)
+      @errors = Const::EMPTY_ARRAY
+      @partial = false
+      @strict_variables = false
+      @resource_limits = resource_limits || ResourceLimits.new(environment.default_resource_limits)
+      @base_scope_depth = 0
+      @interrupts = Const::EMPTY_ARRAY
+      @filters = Const::EMPTY_ARRAY
+      @global_filter = nil
+      @disabled_tags = Const::EMPTY_HASH
+      @string_scanner = nil
+      @registers.static[:file_system] ||= environment.file_system
+      self.exception_renderer = rethrow_errors ? Liquid::RAISE_EXCEPTION_LAMBDA : environment.exception_renderer
+      squash_instance_assigns_with_environments
+    end
   end # Context
 end # Liquid
