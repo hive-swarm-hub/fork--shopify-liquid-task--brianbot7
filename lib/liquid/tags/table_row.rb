@@ -95,12 +95,23 @@ module Liquid
       cols = @attributes.key?('cols') ? to_integer(context.evaluate(@attributes['cols'])) : length
 
       output << "<tr class=\"row1\">\n"
-      context.stack do
-        tablerowloop = Liquid::TablerowloopDrop.new(length, cols)
-        context['tablerowloop'] = tablerowloop
-
+      drop = @cached_tablerow_drop
+      if drop
+        drop.reset(length, cols)
+      else
+        drop = (@cached_tablerow_drop = Liquid::TablerowloopDrop.new(length, cols))
+      end
+      scope = @cached_tablerow_scope
+      if scope
+        scope.clear
+        scope['tablerowloop'] = drop
+      else
+        scope = (@cached_tablerow_scope = { 'tablerowloop' => drop })
+      end
+      context.stack(scope) do
         collection.each do |item|
           context[@variable_name] = item
+          tablerowloop = drop
 
           col = tablerowloop.col
           output << (col < 50 ? TD_COL_STRINGS[col] : "<td class=\"col#{col}\">")

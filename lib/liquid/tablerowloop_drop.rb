@@ -15,6 +15,14 @@ module Liquid
       @index  = 0
     end
 
+    def reset(length, cols)
+      @length = length
+      @row    = 1
+      @col    = 1
+      @cols   = cols
+      @index  = 0
+    end
+
     # @liquid_public_docs
     # @liquid_summary
     #   The total number of iterations in the loop.
