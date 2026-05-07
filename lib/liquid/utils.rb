@@ -79,16 +79,15 @@ module Liquid
 
       if obj.is_a?(String)
         return if obj.empty?
-        obj = obj.downcase
-      end
-
-      case obj
-      when 'now', 'today'
-        Time.now
-      when UNIX_TIMESTAMP_REGEX, Integer
-        Time.at(obj.to_i)
-      when String
+        len = obj.bytesize
+        if len == 3 || len == 5
+          return Time.now if obj == 'now' || obj == 'today' ||
+            ((lower = obj.downcase) == 'now' || lower == 'today')
+        end
+        return Time.at(obj.to_i) if UNIX_TIMESTAMP_REGEX.match?(obj)
         Time.parse(obj)
+      elsif obj.is_a?(Integer)
+        Time.at(obj)
       end
     rescue ::ArgumentError
       nil

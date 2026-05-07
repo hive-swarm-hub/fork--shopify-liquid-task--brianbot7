@@ -865,16 +865,18 @@ module Liquid
       str_format = Utils.to_s(format)
       return input if str_format.empty?
 
-      # ThemeRunner reuses the same timestamp strings heavily across renders.
-      # Cache stable input/format pairs globally so repeated Time.parse/strftime
-      # work can be skipped. Keep "now"/"today" uncached so the filter remains
-      # time-sensitive.
-      normalized_input = input.downcase if input.is_a?(String)
-
-      if normalized_input == 'now' || normalized_input == 'today'
-        date = Utils.to_date(input)
-        return input unless date
-        return date.strftime(str_format)
+      # Only check now/today for 3-char or 5-char inputs; date strings are longer.
+      # Try exact match first (covers the common lowercase literals), then downcase.
+      if input.is_a?(String)
+        len = input.bytesize
+        if len == 3 || len == 5
+          if input == 'now' || input == 'today' ||
+              ((lowered = input.downcase) == 'now' || lowered == 'today')
+            date = Utils.to_date(input)
+            return input unless date
+            return date.strftime(str_format)
+          end
+        end
       end
 
       case input
