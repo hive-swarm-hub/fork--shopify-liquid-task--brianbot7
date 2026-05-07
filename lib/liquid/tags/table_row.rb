@@ -29,6 +29,10 @@ module Liquid
 
     attr_reader :variable_name, :collection_name, :attributes
 
+    # Pre-built frozen strings for common column/row numbers (0-49)
+    TD_COL_STRINGS = Array.new(50) { |i| "<td class=\"col#{i}\">".freeze }.freeze
+    TR_ROW_STRINGS = Array.new(50) { |i| "</tr>\n<tr class=\"row#{i}\">".freeze }.freeze
+
     def initialize(tag_name, markup, options)
       super
       parse_with_selected_parser(markup)
@@ -98,8 +102,9 @@ module Liquid
         collection.each do |item|
           context[@variable_name] = item
 
-          output << "<td class=\"col#{tablerowloop.col}\">"
-          super
+          col = tablerowloop.col
+          output << (col < 50 ? TD_COL_STRINGS[col] : "<td class=\"col#{col}\">")
+          @body.render_to_output_buffer(context, output)
           output << '</td>'
 
           # Handle any interrupts if they exist.
@@ -109,7 +114,8 @@ module Liquid
           end
 
           if tablerowloop.col_last && !tablerowloop.last
-            output << "</tr>\n<tr class=\"row#{tablerowloop.row + 1}\">"
+            next_row = tablerowloop.row + 1
+            output << (next_row < 50 ? TR_ROW_STRINGS[next_row] : "</tr>\n<tr class=\"row#{next_row}\">")
           end
 
           tablerowloop.send(:increment!)
