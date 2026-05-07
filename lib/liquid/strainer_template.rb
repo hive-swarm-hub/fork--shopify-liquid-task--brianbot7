@@ -9,6 +9,8 @@ module Liquid
   # The Strainer only allows method calls defined in filters given to it via StrainerFactory.add_global_filter,
   # Context#add_filters or Template.register_filter
   class StrainerTemplate
+    attr_writer :context
+
     def initialize(context)
       @context = context
     end
@@ -56,7 +58,7 @@ module Liquid
     def invoke(method, *args)
       if self.class.invokable?(method)
         send(method, *args)
-      elsif @context.strict_filters
+      elsif @context&.strict_filters
         raise Liquid::UndefinedFilter, "undefined filter #{method}"
       else
         args.first
@@ -70,7 +72,7 @@ module Liquid
     def invoke_single(method, input)
       if self.class.invokable?(method)
         send(method, input)
-      elsif @context.strict_filters
+      elsif @context&.strict_filters
         raise Liquid::UndefinedFilter, "undefined filter #{method}"
       else
         input
@@ -83,7 +85,7 @@ module Liquid
     def invoke_three(method, input, arg1, arg2)
       if self.class.invokable?(method)
         send(method, input, arg1, arg2)
-      elsif @context.strict_filters
+      elsif @context&.strict_filters
         raise Liquid::UndefinedFilter, "undefined filter #{method}"
       else
         input
@@ -95,7 +97,7 @@ module Liquid
     # Invoke with pre-built args array — dispatches by count to avoid splat allocation
     def invoke_array(method, input, args)
       unless self.class.invokable?(method)
-        if @context.strict_filters
+        if @context&.strict_filters
           raise Liquid::UndefinedFilter, "undefined filter #{method}"
         end
         return input
@@ -115,7 +117,7 @@ module Liquid
     def invoke_two(method, input, arg1)
       if self.class.invokable?(method)
         send(method, input, arg1)
-      elsif @context.strict_filters
+      elsif @context&.strict_filters
         raise Liquid::UndefinedFilter, "undefined filter #{method}"
       else
         input

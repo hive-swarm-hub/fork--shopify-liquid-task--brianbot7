@@ -84,6 +84,7 @@ module Liquid
       @file_system = BlankFileSystem.new
       @default_resource_limits = Const::EMPTY_HASH
       @strainer_template_class_cache = {}
+      @cached_non_strict_strainer = nil
     end
 
     # Registers a new tag with the environment.
@@ -101,6 +102,7 @@ module Liquid
     # @return [void]
     def register_filter(filter)
       @strainer_template_class_cache.clear
+      @cached_non_strict_strainer = nil unless frozen?
       @strainer_template.add_filter(filter)
       Variable.preload_filter_caches(filter.public_instance_methods)
     end
@@ -111,6 +113,7 @@ module Liquid
     # @return [self]
     def register_filters(filters)
       @strainer_template_class_cache.clear
+      @cached_non_strict_strainer = nil unless frozen?
       filters.each { |f| @strainer_template.add_filter(f) }
       self
     end
@@ -124,15 +127,34 @@ module Liquid
     #   access to.
     # @return [Liquid::Strainer] The new strainer instance.
     def create_strainer(context, filters = Const::EMPTY_ARRAY)
-      return @strainer_template.new(context) if filters.empty?
+      if filters.empty?
+        if context&.strict_filters
+          @strainer_template.new(context)
+        else
+          # Cache one strainer instance per non-strict environment and swap @context
+          # before returning it. Filters that access @context (e.g. map setting drop
+          # contexts) always see the current render's context. Safe for sequential
+          # single-threaded use (MRI GIL). For frozen environments we fall through
+          # to per-render allocation to avoid FrozenError on the cache write.
+          cached = @cached_non_strict_strainer
+          if cached
+            cached.context = context
+            cached
+          else
+            s = @strainer_template.new(context)
+            @cached_non_strict_strainer = s unless frozen?
+            s
+          end
+        end
+      else
+        strainer_template = @strainer_template_class_cache[filters] ||= begin
+          klass = Class.new(@strainer_template)
+          filters.each { |f| klass.add_filter(f) }
+          klass
+        end
 
-      strainer_template = @strainer_template_class_cache[filters] ||= begin
-        klass = Class.new(@strainer_template)
-        filters.each { |f| klass.add_filter(f) }
-        klass
+        strainer_template.new(context)
       end
-
-      strainer_template.new(context)
     end
 
     # Returns the names of all the filter methods that are available to use in
